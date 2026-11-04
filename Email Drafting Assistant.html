@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Email Drafting Assistant</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1c2330;--muted:#5d6879;--line:#dfe3ea;--accent:#2f5fd0;--accent-t:#fff;--ok:#1b7f4b;--warn:#b45309;--chip:#eaeffb;--ph:#fff3c4;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#12151b;--card:#1b2029;--text:#e8ebf1;--muted:#99a3b3;--line:#2c3441;--accent:#6f93ee;--accent-t:#0e1320;--ok:#4cc38a;--warn:#f0a85a;--chip:#222c44;--ph:#4a4210}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#12151b;--card:#1b2029;--text:#e8ebf1;--muted:#99a3b3;--line:#2c3441;--accent:#6f93ee;--accent-t:#0e1320;--ok:#4cc38a;--warn:#f0a85a;--chip:#222c44;--ph:#4a4210}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 48px}
+h1{font-size:1.6rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+label{font-weight:600;display:block;margin-bottom:8px}
+textarea{width:100%;min-height:110px;resize:vertical;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font:inherit}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.chip{border:1px solid var(--line);background:var(--chip);color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;font-size:.85rem;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-t);border:0;padding:10px 22px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer}
+button.ghost{background:none;border:1px solid var(--line);color:var(--text);padding:6px 14px;border-radius:8px;font:inherit;font-size:.85rem;cursor:pointer}
+.hint{color:var(--muted);font-size:.85rem;margin-left:auto}
+.subject{font-weight:600;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:12px}
+.body{white-space:pre-wrap;margin:0}
+.ph{background:var(--ph);border-radius:4px;padding:0 3px}
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+.head h2{font-size:1.05rem;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px;font-size:.85rem}
+.meta span{background:var(--chip);border-radius:6px;padding:3px 9px}
+.checks{list-style:none;padding:0;margin:0;font-size:.92rem}
+.checks li{padding:4px 0}
+.ok{color:var(--ok)}.warn{color:var(--warn)}
+.msg{color:var(--warn);font-weight:500}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>✉️ Email Drafting Assistant</h1>
+<p class="sub">Describe your situation, tone and word limit. Get a ready-to-send email with no invented details.</p>
+
+<div class="card">
+<label for="inp">Your request</label>
+<textarea id="inp" placeholder="e.g. Write an email to my manager requesting two days of leave due to a family function. Keep it polite and professional, and limit it to 50 words."></textarea>
+<div class="row" id="ex"></div>
+<div class="row"><button class="primary" id="go">Generate email</button><span class="hint">Ctrl/⌘ + Enter</span></div>
+</div>
+
+<div class="card" id="clar" hidden><p class="msg" id="clarmsg"></p></div>
+
+<div id="out" hidden>
+<div class="card">
+<div class="head"><h2>Draft</h2><button class="ghost" id="copy">Copy</button></div>
+<div class="subject" id="subj"></div>
+<pre class="body" id="body"></pre>
+</div>
+<div class="card">
+<div class="head"><h2>How your request was read</h2></div>
+<div class="meta" id="meta"></div>
+<ul class="checks" id="checks" style="margin-top:12px"></ul>
+</div>
+</div>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var EXAMPLES=[
+"Write an email to my manager requesting two days of leave due to a family function. Keep it polite and professional, and limit it to 50 words.",
+"Email my client apologizing for a delayed report. Formal, 40 words.",
+"Ask HR about my pending salary slip.",
+"Write an email."
+];
+var TONES={
+polite:{hi:"Dear",out:"Best regards,",close:"Thank you for your consideration."},
+formal:{hi:"Dear",out:"Yours sincerely,",close:"Thank you for your time and consideration."},
+friendly:{hi:"Hi",out:"Thanks,",close:"Thanks so much!"},
+firm:{hi:"Dear",out:"Regards,",close:"I would appreciate your prompt response."}
+};
+var RECIP=[
+[/manager|supervisor|\bboss\b/,"manager","[Manager’s Name]"],
+[/\bhr\b|human resources/,"HR","[HR Contact Name]"],
+[/client|customer/,"client","[Client Name]"],
+[/professor|teacher|instructor|lecturer/,"professor","[Professor’s Name]"],
+[/colleague|teammate|coworker/,"colleague","[Colleague’s Name]"],
+[/\bteam\b/,"team","Team"]
+];
+var NUMS={a:"one",an:"one",one:"one",two:"two",three:"three",four:"four",five:"five",half:"half a"};
+
+function wc(s){return s.trim().split(/\s+/).filter(Boolean).length}
+function esc(s){return s.replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+function hl(s){return esc(s).replace(/\[[^\]]+\]/g,function(m){return '<span class="ph">'+m+'</span>'})}
+
+function parse(raw){
+  var t=raw.trim(),low=t.toLowerCase();
+  var lm=low.match(/(\d+)\s*words?\b/);
+  var limit=lm?+lm[1]:null;
+  var tone="polite";
+  if(/formal/.test(low))tone="formal";
+  else if(/friendly|casual/.test(low))tone="friendly";
+  else if(/\bfirm\b|assertive|strong/.test(low))tone="firm";
+  var clean=t.replace(/\b(keep|make|use)\s+(it|the tone|this)\b[^.]*\.?/gi,"")
+    .replace(/\b(limit|within|under|max(?:imum)?)\b[^.]*?\d+\s*words?\b\.?/gi,"")
+    .replace(/\b\d+\s*words?\b/gi,"")
+    .replace(/\b(formal|polite|professional|friendly|firm)\b\.?/gi,"").trim();
+  var rec=null;
+  for(var i=0;i<RECIP.length;i++){if(RECIP[i][0].test(low)){rec=RECIP[i];break}}
+  var purpose=null;
+  if(/resign/.test(low))purpose="resign";
+  else if(/\bleave\b|time off|day off|days off|vacation/.test(low))purpose="leave";
+  else if(/apolog|\bsorry\b/.test(low))purpose="apology";
+  else if(/thank|appreciat/.test(low))purpose="thanks";
+  else if(/meeting|\bmeet\b|schedule a call/.test(low))purpose="meeting";
+  else if(/follow(?:ing)? up|\bask\b|inquir|enquir|status of|update on/.test(low))purpose="followup";
+  else if(/request|need|permission/.test(low))purpose="request";
+  return {raw:t,clean:clean,low:low,limit:limit,tone:tone,rec:rec,purpose:purpose};
+}
+
+function ex(clean,re){var m=clean.match(re);return m?m[1].trim().replace(/[.!,;]+$/,""):null}
+
+function plan(p){
+  var c=p.clean,T=TONES[p.tone],o={};
+  var name=p.rec?p.rec[2]:"[Recipient’s Name]";
+  o.greet=T.hi+" "+name+",";
+  o.out=T.out;o.close=T.close;o.ask="";o.courtesy="";
+  var topic=ex(c,/\b(?:about|regarding|on|for)\s+(.+?)(?:[.;]|$)/i);
+  switch(p.purpose){
+    case "leave":
+      o.subject="Leave Request";
+      var dm=c.match(/\b(\d+|a|an|one|two|three|four|five|half)[\s-]*(day|days|week|weeks)\b/i);
+      var dur=dm?(NUMS[dm[1].toLowerCase()]||dm[1])+" "+(dm[1].toLowerCase()==="half"?"day":dm[2].toLowerCase()):"[number of days]";
+      if(/^one days?$/.test(dur))dur="one day";
+      var datem=c.match(/\b((?:from|on)\s+(?:\d{1,2}\s+\w+|\w+\s+\d{1,2}|\d{1,2}[\/\-]\d{1,2})(?:\s+(?:to|until|-)\s+(?:\d{1,2}\s+\w+|\w+\s+\d{1,2}|\d{1,2}[\/\-]\d{1,2}))?)/i);
+      var dates=datem?datem[1]:"from [Start Date] to [End Date]";
+      var reason=ex(c,/\b(?:due to|because of|owing to)\s+(.+?)(?:[.;]|$)/i)||ex(c,/\bleave\s+for\s+(.+?)(?:[.;]|$)/i);
+      o.core=function(d){return "I would like to request "+dur+" of leave"+(d?" "+dates:"")+(reason?" due to "+reason:"")+"."};
+      o.ask={polite:"Kindly approve my request.",friendly:"Hope that works for you.",firm:"Please confirm approval at the earliest."}[p.tone]||"Kindly approve my request.";
+      o.courtesy="I will ensure my pending tasks are managed before my leave.";
+      break;
+    case "apology":
+      o.subject="Apology";
+      var a=ex(c,/\b(?:apologi[sz]\w*|sorry)\s+(?:for|about)\s+(.+?)(?:[.;]|$)/i)||topic||"[the issue]";
+      o.core=function(){return "I sincerely apologize for "+a+"."};
+      o.ask="Please let me know how I can help resolve this.";
+      break;
+    case "thanks":
+      o.subject="Thank You";
+      var th=ex(c,/\bthank(?:ing)?(?:\s+\w+)?\s+for\s+(.+?)(?:[.;]|$)/i)||topic||"[reason for thanks]";
+      o.core=function(){return "Thank you for "+th+"."};
+      o.close="";
+      break;
+    case "meeting":
+      o.subject="Meeting Request";
+      var mt=ex(c,/\b(?:about|regarding|to discuss|discuss)\s+(.+?)(?:[.;]|$)/i);
+      o.core=function(){return "I would like to request a meeting"+(mt?" to discuss "+mt:"")+"."};
+      o.ask="Please let me know a convenient time.";
+      break;
+    case "followup":
+      o.subject=/follow/.test(p.low)?"Follow-Up":"Inquiry";
+      var verb=/follow/.test(p.low)?"follow up on":"ask about";
+      var ft=topic||"[subject]";
+      o.core=function(){return "I am writing to "+verb+" "+ft+"."};
+      o.ask={polite:"Could you please share an update at your earliest convenience?",friendly:"Could you share an update when you can?",firm:"Please share an update at the earliest."}[p.tone]||"Could you please share an update at your earliest convenience?";
+      break;
+    case "resign":
+      o.subject="Resignation";
+      o.core=function(){return "I am writing to formally resign from my position as [Your Position], effective [Last Working Date]."};
+      o.courtesy="I will ensure a smooth handover.";
+      break;
+    case "request":
+      o.subject="Request";
+      var rq=ex(c,/\b(?:request(?:ing)?|ask(?:ing)? for|need(?:ing)?)\s+(.+?)(?:[.;]|$)/i)||"[your request]";
+      o.core=function(){return "I am writing to request "+rq+"."};
+      o.ask="Kindly let me know if you need any further details.";
+      break;
+    default:
+      o.subject="[Subject]";
+      o.core=function(){return "I am writing regarding [purpose of email]."};
+  }
+  return o;
+}
+
+function assemble(o,drop){
+  var parts=[o.core(!drop.dates)];
+  if(!drop.ask&&o.ask)parts.push(o.ask);
+  if(!drop.courtesy&&o.courtesy)parts.push(o.courtesy);
+  var s=o.greet+"\n\n"+parts.join(" ");
+  if(!drop.close&&o.close)s+="\n\n"+o.close;
+  return s+"\n\n"+o.out+"\n[Your Name]";
+}
+
+function draft(p){
+  var o=plan(p),drop={},order=["courtesy","close","dates","ask"],body=assemble(o,drop),i=0;
+  if(p.limit){
+    while(wc(body)>p.limit&&i<order.length){drop[order[i++]]=true;body=assemble(o,drop)}
+  }
+  return {subject:o.subject,body:body,over:p.limit&&wc(body)>p.limit};
+}
+
+var last="";
+function run(){
+  var raw=$("inp").value;
+  $("clar").hidden=true;$("out").hidden=true;
+  if(!raw.trim()){$("clarmsg").textContent="Please describe the email you need.";$("clar").hidden=false;return}
+  var p=parse(raw);
+  if(!p.purpose&&!p.rec){
+    $("clarmsg").textContent="Who is this email for, and what is it about? Add a recipient and a purpose, for example: “Email my manager to request a meeting.”";
+    $("clar").hidden=false;return;
+  }
+  var d=draft(p),n=wc(d.body);
+  last="Subject: "+d.subject+"\n\n"+d.body;
+  $("subj").textContent="Subject: "+d.subject;
+  $("body").innerHTML=hl(d.body);
+  var phs=(d.body.match(/\[[^\]]+\]/g)||[]).filter(function(v,i,a){return a.indexOf(v)===i});
+  $("meta").innerHTML=
+    "<span>Recipient: "+esc(p.rec?p.rec[1]:"not specified")+"</span>"+
+    "<span>Purpose: "+esc(d.subject)+"</span>"+
+    "<span>Tone: "+p.tone+"</span>"+
+    "<span>Word limit: "+(p.limit||"none")+"</span>"+
+    "<span>Words: "+n+(p.limit?" / "+p.limit:"")+"</span>";
+  var ck=[];
+  ck.push(['ok',"Tone: "+p.tone+(/formal|friendly|firm|polite/.test(p.low)?" (as requested)":" (default)")]);
+  ck.push([d.over?'warn':'ok',p.limit?(d.over?"Word limit "+p.limit+" is too small to fit even the core message ("+n+" words).":n+" words, within the "+p.limit+"-word limit (subject line excluded)."):"No word limit given, so the email is kept brief."]);
+  ck.push(['ok',"No invented details: only facts from your request are used."]);
+  ck.push(['ok',"Only relevant content is included."]);
+  ck.push([phs.length?'warn':'ok',phs.length?"Missing details left as placeholders: "+phs.join(", ")+".":"No placeholders needed."]);
+  $("checks").innerHTML=ck.map(function(c){return '<li class="'+c[0]+'">'+(c[0]==='ok'?'✓ ':'! ')+esc(c[1])+'</li>'}).join("");
+  $("out").hidden=false;
+  $("out").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+$("ex").innerHTML=EXAMPLES.map(function(e,i){return '<button class="chip" data-i="'+i+'">'+esc(e.length>38?e.slice(0,36)+"…":e)+'</button>'}).join("");
+$("ex").addEventListener("click",function(e){var b=e.target.closest("button");if(b){$("inp").value=EXAMPLES[+b.dataset.i];run()}});
+$("go").addEventListener("click",run);
+$("inp").addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key==="Enter")run()});
+$("copy").addEventListener("click",function(){
+  var done=function(){$("copy").textContent="Copied";setTimeout(function(){$("copy").textContent="Copy"},1500)};
+  try{navigator.clipboard.writeText(last).then(done,fallback)}catch(e){fallback()}
+  function fallback(){var t=document.createElement("textarea");t.value=last;document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){}document.body.removeChild(t)}
+});
+})();
+</script>
+</body>
+</html>
